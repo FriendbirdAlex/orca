@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.orca</groupId>
+        <artifactId>orca-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>orca-api</artifactId>
+    <name>orca-api</name>
+    <description>接入层: REST + SSE + 鉴权, 唯一可启动模块(spring-boot:run)</description>
+
+    <dependencies>
+        <dependency><groupId>com.orca</groupId><artifactId>orca-common</artifactId></dependency>
+        <dependency><groupId>com.orca</groupId><artifactId>orca-observability</artifactId></dependency>
+        <dependency><groupId>com.orca</groupId><artifactId>orca-gateway</artifactId></dependency>
+        <dependency><groupId>com.orca</groupId><artifactId>orca-workflow</artifactId></dependency>
+        <dependency><groupId>com.orca</groupId><artifactId>orca-agent</artifactId></dependency>
+
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+        <dependency><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><scope>provided</scope></dependency>
+
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    </dependencies>
+
+    <build>
+        <finalName>orca-api</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.orca.api.OrcaApiApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals><goal>repackage</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

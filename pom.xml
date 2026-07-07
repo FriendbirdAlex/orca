@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- ============================================================
+         Orca · AI 工作流编排平台
+         = 轻量 Temporal(编排) + LLM 网关(治理) + Agent runtime(推理)
+         分阶段: P1网关 → P2缓存/熔断/计费 → P3工作流引擎 → P4 Agent
+         ============================================================ -->
+
+    <groupId>com.orca</groupId>
+    <artifactId>orca-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>orca-parent</name>
+    <description>AI workflow orchestration platform: workflow engine + LLM gateway + agent runtime</description>
+
+    <modules>
+        <module>orca-common</module>
+        <module>orca-observability</module>
+        <module>orca-gateway</module>
+        <module>orca-workflow</module>
+        <module>orca-agent</module>
+        <module>orca-api</module>
+    </modules>
+
+    <properties>
+        <java.version>21</java.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <!-- BOM 统一管控 -->
+        <spring-boot.version>3.2.5</spring-boot.version>
+        <spring-cloud.version>2023.0.1</spring-cloud.version>
+
+        <!-- 中间件客户端版本(单独引, 不全用 starter 便于讲清依赖) -->
+        <mybatis-plus.version>3.5.5</mybatis-plus.version>
+        <redisson.version>3.27.2</redisson.version>
+        <kafka.version>3.6.1</kafka.version>
+        <elasticsearch.version>8.12.2</elasticsearch.version>
+        <resilience4j.version>2.2.0</resilience4j.version>
+        <hutool.version>5.8.27</hutool.version>
+        <lombok.version>1.18.32</lombok.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- 内部模块互引 -->
+            <dependency><groupId>com.orca</groupId><artifactId>orca-common</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.orca</groupId><artifactId>orca-observability</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.orca</groupId><artifactId>orca-gateway</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.orca</groupId><artifactId>orca-workflow</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.orca</groupId><artifactId>orca-agent</artifactId><version>${project.version}</version></dependency>
+
+            <dependency><groupId>com.baomidou</groupId><artifactId>mybatis-plus-spring-boot3-starter</artifactId><version>${mybatis-plus.version}</version></dependency>
+            <dependency><groupId>org.redisson</groupId><artifactId>redisson-spring-boot-starter</artifactId><version>${redisson.version}</version></dependency>
+            <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-spring-boot3</artifactId><version>${resilience4j.version}</version></dependency>
+            <dependency><groupId>cn.hutool</groupId><artifactId>hutool-all</artifactId><version>${hutool.version}</version></dependency>
+            <dependency><groupId>org.mapstruct</groupId><artifactId>mapstruct</artifactId><version>${mapstruct.version}</version></dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                    <configuration>
+                        <release>${java.version}</release>
+                        <annotationProcessorPaths>
+                            <path><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><version>${lombok.version}</version></path>
+                            <path><groupId>org.mapstruct</groupId><artifactId>mapstruct-processor</artifactId><version>${mapstruct.version}</version></path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.5</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+</project>

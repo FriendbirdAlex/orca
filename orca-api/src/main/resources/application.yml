@@ -1,0 +1,53 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: orca-api
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  # 虚拟线程: Java21 亮点, 提升高并发吞吐(面试点)
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+# actuator 暴露 health/prometheus, 供 K8s 探针与 Prometheus 抓取
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  health:
+    redis:
+      enabled: false   # P1 阶段未连 Redis, 先关闭避免启动失败
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    root: INFO
+    com.orca: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level [%X{traceId}] %logger{36} - %msg%n"
+
+# ---- 以下为后续阶段配置, P1 暂未启用, 占位便于连贯 ----
+orca:
+  gateway:
+    # 限流: 令牌桶(租户维度)
+    default-rpm: 60
+    default-tpm: 100000
+  workflow:
+    # 调度器扫描间隔
+    scan-interval-ms: 3000
+  agent:
+    max-steps: 15
+    max-tokens: 50000

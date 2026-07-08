@@ -37,6 +37,9 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 2
       connection-timeout: 5000
+  # ---- P2: 接入 Kafka(异步记账) ----
+  kafka:
+    bootstrap-servers: localhost:9092
 
 # MyBatis-Plus
 mybatis-plus:
@@ -59,6 +62,23 @@ management:
     sampling:
       probability: 1.0
 
+# Resilience4j 熔断(程序式注册, 此 config 作为默认; Resilience4jConfig 启动时为每个 Provider 建熔断器)
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 60
+        slow-call-duration-threshold: 3s
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
+        automatic-transition-from-open-to-half-open-enabled: true
+        ignore-exceptions:
+          - com.orca.common.exception.BizException   # 业务异常不计入熔断, 只记上游故障
+
 logging:
   level:
     root: INFO
@@ -68,6 +88,12 @@ logging:
 
 # ---- 业务配置 ----
 orca:
+  # P2: PgVector 语义缓存第二数据源(独立配置, 不走 spring.datasource 避免自动配置冲突)
+  pgvector:
+    url: jdbc:postgresql://localhost:5432/orca_vec
+    username: orca
+    password: orca123
+    pool-size: 8
   gateway:
     # 限流: 令牌桶(租户维度), 此为默认值, 实际取 tenant 表配置
     default-rpm: 60
@@ -76,6 +102,15 @@ orca:
     mock:
       response-chunk-count: 20
       chunk-delay-ms: 80
+    # P2 语义缓存
+    cache:
+      enabled: true
+      dimension: 384
+      similarity-threshold: 0.92
+      ttl-hours: 24
+    # P2 计费单价
+    pricing:
+      per-k-tokens: 0.002
   workflow:
     # 调度器扫描间隔
     scan-interval-ms: 3000

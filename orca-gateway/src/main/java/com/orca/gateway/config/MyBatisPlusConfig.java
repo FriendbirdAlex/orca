@@ -3,6 +3,7 @@ package com.orca.gateway.config;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import org.apache.ibatis.annotations.Mapper;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,12 +11,13 @@ import org.springframework.context.annotation.Configuration;
 /**
  * MyBatis-Plus 配置: 扫描 gateway 下所有包的 Mapper + 分页插件。
  *
- * MapperScan 用 com.orca.gateway 扫全部子包(部分 Mapper 直接在业务包根下, 如 billing.CallLogMapper),
- * 配合各 Mapper 上的 @Mapper 注解, 确保都被注册。
- *  覆盖: service.mapper(Tenant/ApiKey) / billing(CallLog) / quota.mapper(TenantQuota)
+ * 面试点(踩坑): @MapperScan("com.orca.gateway") 会把包下所有接口都当 Mapper 注册,
+ *  包括 LlmProvider/ProviderRouter 等业务接口 → 注入 List<LlmProvider> 时混入 MyBatis 代理,
+ *  调用其方法报 "Invalid bound statement"。
+ *  解法: annotationClass = Mapper.class, 只注册显式标注 @Mapper 的接口。
  */
 @Configuration
-@MapperScan("com.orca.gateway")
+@MapperScan(basePackages = "com.orca.gateway", annotationClass = Mapper.class)
 public class MyBatisPlusConfig {
 
     @Bean
@@ -25,3 +27,4 @@ public class MyBatisPlusConfig {
         return interceptor;
     }
 }
+

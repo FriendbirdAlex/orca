@@ -8,6 +8,8 @@ import com.orca.common.exception.ErrorCode;
 import com.orca.common.result.Result;
 import com.orca.gateway.billing.CallLog;
 import com.orca.gateway.billing.CallLogService;
+import com.orca.gateway.cache.CacheHit;
+import com.orca.gateway.cache.SemanticCacheService;
 import com.orca.gateway.limiter.LimitType;
 import com.orca.gateway.limiter.RateLimiter;
 import com.orca.gateway.provider.TokenEstimator;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -53,6 +56,7 @@ public class ChatService {
     private final QuotaManager quotaManager;
     private final TokenEstimator estimator;
     private final CallLogService callLogService;
+    private final SemanticCacheService semanticCacheService;
     private final ObjectMapper objectMapper;
 
     // ==================== 同步对话 ====================
@@ -68,6 +72,33 @@ public class ChatService {
         if (!rateLimiter.tryConsume(t.tenantId(), LimitType.RPM, 1, t.rpm()).allowed()) {
             throw new BizException(ErrorCode.GW_LIMITED);
         }
+
+        // 1.5) P2 语义缓存: 命中则不扣 tpm/quota、不调 Provider, 直接返回(cached=true)
+        //      缓存查询失败(如 PgVector 未启动)降级为未命中, 不影响主流程
+        var cacheHit = semanticCacheService.tryGet(t.tenantId(), req.getModel(), promptText(req));
+        if (cacheHit.isPresent()) {
+            CacheHit hit = cacheHit.get();
+            ChatResponse cached = ChatResponse.builder()
+                    .id("cache-" + hit.entryId())
+                    .model(req.getModel())
+                    .choices(List.of(ChatResponse.Choice.builder()
+                            .index(0)
+                            .message(ChatResponse.Message.builder().role("assistant").content(hit.responseText()).build())
+                            .finishReason("stop")
+                            .build()))
+                    .usage(ChatResponse.Usage.builder()
+                            .promptTokens(prompt)
+                            .completionTokens(hit.totalTokens())
+                            .totalTokens(prompt + hit.totalTokens())
+                            .build())
+                    .cached(true)
+                    .build();
+            // 命中记一条轻量 call_log(provider=cache), 不 settle(未扣 tpm/quota)
+            record(t, req, "cache", false, cached.getUsage(), System.currentTimeMillis() - start, null);
+            log.debug("[chat] 缓存命中 tenant={} semantic={}", t.tenantId(), hit.semantic());
+            return Result.success(cached);
+        }
+
         // 2) 限流 tpm(maxTokens) 预扣
         if (!rateLimiter.tryConsume(t.tenantId(), LimitType.TPM, maxTokens, t.tpm()).allowed()) {
             // tpm 失败, 退回 rpm(简化: 不退, 留作权衡点)
@@ -91,9 +122,17 @@ public class ChatService {
             settle(t, maxTokens, actualCompletion, reserve, actualTotal);
             // 6) 记账
             record(t, req, provider.name(), false, resp.getUsage(), System.currentTimeMillis() - start, null);
+            // 7) P2 写缓存(失败忽略)
+            semanticCacheService.put(t.tenantId(), req.getModel(), promptText(req),
+                    resp.getChoices().get(0).getMessage().getContent(), actualTotal);
             return Result.success(resp);
         } catch (BizException e) {
-            // Provider 路由类业务异常, 不退 quota(已是路由失败)
+            // 熔断开启: 调用未触达上游, 全额退回(同失败语义); 其他业务异常(如路由失败)不退
+            if (e.getCode() == ErrorCode.GW_CIRCUIT_OPEN.getCode()) {
+                rateLimiter.refund(t.tenantId(), LimitType.TPM, maxTokens, t.tpm());
+                quotaManager.refund(t.tenantId(), reserve, t.dailyQuota());
+                record(t, req, provider.name(), false, null, System.currentTimeMillis() - start, ErrorCode.GW_CIRCUIT_OPEN.getCode());
+            }
             throw e;
         } catch (Exception e) {
             // Provider 调用失败: 全额退回 tpm + quota
@@ -148,31 +187,44 @@ public class ChatService {
         AtomicReference<ChatResponse.Usage> usageRef = new AtomicReference<>();
 
         // 5) 流式推送(Reactor 线程)
-        return p.streamChat(req)
-                .map(chunk -> {
-                    if (chunk.isFinal() && chunk.usage() != null) {
-                        usageRef.set(chunk.usage());
-                    }
-                    return toSse("message", writeJson(chunk));
-                })
-                .concatWith(Flux.just(toSse("message", "[DONE]")))
-                .onErrorResume(e -> {
-                    // 流中错误: 全额退回 + 记账
-                    rateLimiter.refund(tenantId, LimitType.TPM, maxTokens, tpm);
-                    quotaManager.refund(tenantId, reserve, dailyQuota);
-                    recordById(tenantId, t, req, providerName, true, null,
-                            System.currentTimeMillis() - start, ErrorCode.GW_UPSTREAM_ERROR.getCode());
-                    return Flux.just(toSse("error", writeJson(Result.fail(ErrorCode.GW_UPSTREAM_ERROR.getCode(), e.getMessage()))));
-                })
-                .doOnComplete(() -> {
-                    // 正常结束: 用末包 usage 结算
-                    ChatResponse.Usage u = usageRef.get();
-                    int actualTotal = u == null ? reserve : u.getTotalTokens();
-                    int actualCompletion = u == null ? maxTokens : u.getCompletionTokens();
-                    settleById(tenantId, dailyQuota, tpm, maxTokens, actualCompletion, reserve, actualTotal);
-                    recordById(tenantId, t, req, providerName, true, u,
-                            System.currentTimeMillis() - start, null);
-                });
+        // 装饰器 streamChat 会同步预检熔断: 开启则在装配时抛 BizException(GW_CIRCUIT_OPEN)
+        // 此处 try-catch 捕获装配期异常(请求线程), 退回已扣额度; 流中错误由 onErrorResume 处理
+        try {
+            return p.streamChat(req)
+                    .map(chunk -> {
+                        if (chunk.isFinal() && chunk.usage() != null) {
+                            usageRef.set(chunk.usage());
+                        }
+                        return toSse("message", writeJson(chunk));
+                    })
+                    .concatWith(Flux.just(toSse("message", "[DONE]")))
+                    .onErrorResume(e -> {
+                        // 流中错误: 全额退回 + 记账
+                        rateLimiter.refund(tenantId, LimitType.TPM, maxTokens, tpm);
+                        quotaManager.refund(tenantId, reserve, dailyQuota);
+                        recordById(tenantId, t, req, providerName, true, null,
+                                System.currentTimeMillis() - start, ErrorCode.GW_UPSTREAM_ERROR.getCode());
+                        return Flux.just(toSse("error", writeJson(Result.fail(ErrorCode.GW_UPSTREAM_ERROR.getCode(), e.getMessage()))));
+                    })
+                    .doOnComplete(() -> {
+                        // 正常结束: 用末包 usage 结算
+                        ChatResponse.Usage u = usageRef.get();
+                        int actualTotal = u == null ? reserve : u.getTotalTokens();
+                        int actualCompletion = u == null ? maxTokens : u.getCompletionTokens();
+                        settleById(tenantId, dailyQuota, tpm, maxTokens, actualCompletion, reserve, actualTotal);
+                        recordById(tenantId, t, req, providerName, true, u,
+                                System.currentTimeMillis() - start, null);
+                    });
+        } catch (BizException e) {
+            // 熔断开启(装饰器装配期同步预检): 全额退回
+            if (e.getCode() == ErrorCode.GW_CIRCUIT_OPEN.getCode()) {
+                rateLimiter.refund(tenantId, LimitType.TPM, maxTokens, tpm);
+                quotaManager.refund(tenantId, reserve, dailyQuota);
+                recordById(tenantId, t, req, providerName, true, null,
+                        System.currentTimeMillis() - start, ErrorCode.GW_CIRCUIT_OPEN.getCode());
+            }
+            throw e;
+        }
     }
 
     // ==================== 结算/记账 helper ====================

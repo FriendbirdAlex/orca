@@ -20,6 +20,9 @@ public class ChatResponse {
     private String model;
     private List<Choice> choices;
     private Usage usage;
+    /** P2: 是否命中语义缓存 */
+    @Builder.Default
+    private boolean cached = false;
 
     @Data
     @Builder

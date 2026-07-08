@@ -99,6 +99,7 @@ services:
       - "5432:5432"
     volumes:
       - ./data/pgvector:/var/lib/postgresql/data
+      - ./init/pgvector:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U orca"]
       interval: 10s

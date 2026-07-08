@@ -37,5 +37,7 @@ secrets/
 *.key
 
 # ---- 数据卷 / 日志 ----
-deploy/data/
+# docker-compose 数据卷挂载在 deploy/docker/data/ 下, 切勿提交数据库文件
+deploy/**/data/
+deploy/docker/data/
 logs/

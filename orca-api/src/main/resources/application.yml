@@ -15,6 +15,33 @@ spring:
     default-property-inclusion: non_null
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
+  # ---- P1: 接入 Redis(限流/配额热路径) ----
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+  # ---- P1: 接入 MySQL(鉴权/记账/配额源记录) ----
+  datasource:
+    url: jdbc:mysql://localhost:3306/orca?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: orca
+    password: orca123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+
+# MyBatis-Plus
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
 
 # actuator 暴露 health/prometheus, 供 K8s 探针与 Prometheus 抓取
 management:
@@ -27,7 +54,7 @@ management:
       show-details: when-authorized
   health:
     redis:
-      enabled: false   # P1 阶段未连 Redis, 先关闭避免启动失败
+      enabled: true   # P1 已接 Redis
   tracing:
     sampling:
       probability: 1.0
@@ -39,12 +66,16 @@ logging:
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] %-5level [%X{traceId}] %logger{36} - %msg%n"
 
-# ---- 以下为后续阶段配置, P1 暂未启用, 占位便于连贯 ----
+# ---- 业务配置 ----
 orca:
   gateway:
-    # 限流: 令牌桶(租户维度)
+    # 限流: 令牌桶(租户维度), 此为默认值, 实际取 tenant 表配置
     default-rpm: 60
     default-tpm: 100000
+    default-daily-quota: 1000000
+    mock:
+      response-chunk-count: 20
+      chunk-delay-ms: 80
   workflow:
     # 调度器扫描间隔
     scan-interval-ms: 3000

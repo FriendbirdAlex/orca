@@ -114,6 +114,18 @@ orca:
   workflow:
     # 调度器扫描间隔
     scan-interval-ms: 3000
+    human-task:
+      scan-interval-ms: 10000
+      default-timeout-minutes: 60
+    lock:
+      wait-ms: 500
+    backoff-ms: 5000
+    saga:
+      max-retry: 3
+    http:
+      connect-timeout-ms: 3000
+      read-timeout-ms: 5000
+    scheduler-batch-size: 100
   agent:
     max-steps: 15
     max-tokens: 50000

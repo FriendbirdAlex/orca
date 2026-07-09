@@ -58,6 +58,10 @@ public class KafkaConfig {
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.RETRIES_CONFIG, 3);
         props.put(ProducerConfig.LINGER_MS_CONFIG, 10);
+        // Kafka 不可用时 send 快速失败(默认 max.block.ms=60s 会阻塞主流程), 降级到 catch 不阻塞
+        props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 3000);
+        props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 5000);
+        props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 3000);
         return new DefaultKafkaProducerFactory<>(props);
     }
 

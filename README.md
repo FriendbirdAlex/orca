@@ -74,7 +74,7 @@ curl http://localhost:8080/actuator/health
 | P0 | 脚手架 + 依赖栈 + CI | ✅ |
 | P1 | LLM 网关 MVP：Provider 适配 + 限流 + 配额 + SSE 透传 | ✅ |
 | P2 | 语义缓存 + 熔断降级 + Kafka 异步记账 + 计费对账 | ✅ |
-| P3 | 工作流引擎：DAG + 状态机 + 事件溯源 + Saga | ⏳ |
+| P3 | 工作流引擎：DAG + 状态机 + 事件溯源 + Saga | ✅ |
 | P4 | Agent 编排：ReAct + 多 Agent + Human-in-loop | ⏳ |
 
 ## License

@@ -16,6 +16,8 @@
         <dependency><groupId>com.orca</groupId><artifactId>orca-common</artifactId></dependency>
         <dependency><groupId>com.orca</groupId><artifactId>orca-observability</artifactId></dependency>
         <dependency><groupId>com.orca</groupId><artifactId>orca-gateway</artifactId></dependency>
+        <!-- P4: Agent 节点执行器依赖 AgentRuntime(agent 不依赖 workflow, 避免循环) -->
+        <dependency><groupId>com.orca</groupId><artifactId>orca-agent</artifactId></dependency>
 
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>

@@ -70,6 +70,12 @@ public class MockLlmProvider implements LlmProvider {
     // ---- helpers ----
 
     private String buildMockText(ChatRequest req) {
+        // ★ ReAct 协议模式: system message 含 [REACT_MODE] 标记 → 脚本化输出 Action/Final
+        String systemMsg = firstSystemMessage(req);
+        if (systemMsg != null && systemMsg.contains("[REACT_MODE]")) {
+            return buildReActScript(req, systemMsg);
+        }
+        // ---- 以下为原有 P1 逻辑, 普通 chat 不受影响 ----
         String lastUser = lastUserMessage(req);
         // 模拟一段固定 + 拼接的回复, 长度随 prompt 略变以便观察 token 计量
         int paragraphs = 1 + (lastUser.length() % 3);
@@ -81,6 +87,74 @@ public class MockLlmProvider implements LlmProvider {
               .append("随机种子=").append(ThreadLocalRandom.current().nextInt(1000)).append("。 ");
         }
         return sb.toString();
+    }
+
+    /**
+     * 脚本化 ReAct: 按 system message 注入的 step/observations 决定输出。
+     * 策略:
+     *  - step 1: 输出 Action: weather({"city":从query抽取})
+     *  - step>=2 且有 observation: 输出 Final Answer: 拼装 observation
+     *  - 兜底: Final Answer
+     * 生产换真模型: 让模型按 system prompt 输出同格式(或解析 tool_calls), ReActLoop 循环不动。
+     */
+    private String buildReActScript(ChatRequest req, String systemMsg) {
+        int step = parseInt(systemMsg, "step", 1);
+        String query = parseField(systemMsg, "query", "");
+        String observations = parseSection(systemMsg, "observations");
+
+        // 第 1 步: 调 weather 工具(从 query 抽取城市名)
+        if (step == 1) {
+            String city = extractCity(query);
+            return "Thought: 我需要查询" + city + "的天气, 调用 weather 工具。\n"
+                    + "Action: weather({\"city\":\"" + city + "\"})";
+        }
+        // 第 2 步及以后: 已有 observation, 输出 Final Answer
+        if (!observations.contains("(无)")) {
+            String obs = extractFirstObservation(observations);
+            return "Thought: 我已获得数据, 可以回答了。\n"
+                    + "Final Answer: 根据查询结果, " + obs;
+        }
+        // 兜底(不应到这)
+        return "Final Answer: " + query + "(脚本兜底)";
+    }
+
+    private String firstSystemMessage(ChatRequest req) {
+        if (req.getMessages() == null) return null;
+        return req.getMessages().stream()
+                .filter(m -> "system".equalsIgnoreCase(m.getRole()))
+                .findFirst().map(ChatRequest.Message::getContent).orElse(null);
+    }
+
+    private int parseInt(String s, String field, int def) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(field + ":\\s*(\\d+)").matcher(s);
+        return m.find() ? Integer.parseInt(m.group(1)) : def;
+    }
+
+    private String parseField(String s, String field, String def) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(field + ":\\s*(.+)").matcher(s);
+        return m.find() ? m.group(1).trim() : def;
+    }
+
+    private String parseSection(String s, String section) {
+        int idx = s.indexOf(section + ":");
+        if (idx < 0) return "";
+        String rest = s.substring(idx + section.length() + 1);
+        // 截到下一个 "请输出" 或末尾
+        int end = rest.indexOf("\n请输出");
+        return end >= 0 ? rest.substring(0, end) : rest;
+    }
+
+    private String extractCity(String query) {
+        // 简化: "北京天气" → "北京"; 生产换 NLP/真模型
+        int idx = query.indexOf("天气");
+        if (idx > 0) return query.substring(0, idx).trim();
+        return "北京";
+    }
+
+    private String extractFirstObservation(String observations) {
+        // 取第一行 [1] xxx -> observation 后的内容
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\[1][^\\n]*->\\s*(.+)").matcher(observations);
+        return m.find() ? m.group(1).trim() : "无数据";
     }
 
     private String promptText(ChatRequest req) {

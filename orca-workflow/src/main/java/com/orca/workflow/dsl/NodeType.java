@@ -9,5 +9,6 @@ package com.orca.workflow.dsl;
 public enum NodeType {
     LLM,
     HTTP,
-    HUMAN
+    HUMAN,
+    AGENT
 }
